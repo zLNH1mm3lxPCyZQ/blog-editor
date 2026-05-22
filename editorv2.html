@@ -813,13 +813,7 @@
                             btn.addEventListener('mousedown', (e) => {
                                 e.preventDefault(); // prevent losing selection
                                 const format = btn.dataset.format;
-
-                                if (format === 'highlight') {
-                                    toggleHighlight(el);
-                                } else {
-                                    document.execCommand(format, false, null);
-                                }
-
+                                toggleFormat(format, el);
                                 block.text = htmlToText(el.innerHTML);
                                 updateFormatButtonStates(wrap);
                             });
@@ -851,13 +845,23 @@
             document.addEventListener('selectionchange', () => {
                 const sel = window.getSelection();
                 if (!sel || !sel.rangeCount) return;
-                const node = sel.getRangeAt(0).startContainer;
+                const range = sel.getRangeAt(0);
+                const node = range.startContainer;
                 const el = node.nodeType === 1 ? node : node.parentElement;
                 if (!el) return;
                 const wrap = el.closest('.block-wrap');
-                if (wrap && wrap.querySelector('[contenteditable="true"]')) {
-                    updateFormatButtonStates(wrap);
+                if (!wrap) return;
+                const editEl = wrap.querySelector('[contenteditable="true"]');
+                if (!editEl) return;
+
+                // if the cursor moved away from the pending anchor, clean it up
+                if (pendingAnchor && range.startContainer !== pendingAnchor) {
+                    removePendingAnchor();
                 }
+
+                // recompute active formats from DOM at caret
+                recomputeActiveFormats(el, editEl);
+                updateFormatButtonStates(wrap);
             });
 
             // convert plain text with \n to html with <br>, preserving formatting tags
@@ -1131,6 +1135,16 @@
             // ---------- keyboard handling ----------
             let slashMenuOpen = false;
 
+            // ---------- formatting state machine ----------
+            // single source of truth for which inline formats are "active" at the caret.
+            // when toggled at a collapsed cursor, we materialize this state as a chain of
+            // nested DOM elements wrapping a zero-width-space anchor. typing into the
+            // anchor inherits the formatting; when the cursor leaves, the anchor is
+            // cleaned up (or kept if the user typed real content).
+            const activeFormats = { bold: false, italic: false, underline: false, highlight: false };
+            let pendingAnchor = null;       // text node containing the ZWSP, or null
+            let pendingAnchorRoot = null;   // outermost wrapper of the anchor chain (or anchor itself)
+
             // check if a node is inside a yellow-highlighted span
             function findHighlightAncestor(node, root) {
                 let n = node;
@@ -1152,68 +1166,213 @@
                 parent.removeChild(span);
             }
 
-            // toggle highlight on the current selection (or for next typing if collapsed)
-            function toggleHighlight(rootEl) {
+            // recompute activeFormats by walking ancestors of the caret
+            function recomputeActiveFormats(node, rootEl) {
+                activeFormats.bold = false;
+                activeFormats.italic = false;
+                activeFormats.underline = false;
+                activeFormats.highlight = false;
+                let n = node;
+                while (n && n !== rootEl) {
+                    if (n.nodeType === 1) {
+                        const t = n.tagName;
+                        if (t === 'B' || t === 'STRONG') activeFormats.bold = true;
+                        if (t === 'I' || t === 'EM') activeFormats.italic = true;
+                        if (t === 'U') activeFormats.underline = true;
+                        if (t === 'SPAN' && n.style && (
+                            n.style.backgroundColor === 'rgb(254, 240, 138)' ||
+                            n.style.backgroundColor === '#fef08a' ||
+                            n.style.backgroundColor === 'yellow'
+                        )) activeFormats.highlight = true;
+                    }
+                    n = n.parentNode;
+                }
+            }
+
+            // remove the pending anchor from the DOM. if it still only contains the
+            // ZWSP placeholder, drop it entirely; otherwise just strip the ZWSP.
+            function removePendingAnchor() {
+                if (!pendingAnchor) return;
+                const txt = pendingAnchor;
+                const root = pendingAnchorRoot;
+                // if user only had the ZWSP (no real typing happened), remove the whole chain
+                if (txt.data === '\u200B') {
+                    if (root && root.parentNode) root.parentNode.removeChild(root);
+                } else {
+                    // user typed into the anchor; keep wrappers, just strip the ZWSP
+                    txt.data = txt.data.replace(/\u200B/g, '');
+                }
+                pendingAnchor = null;
+                pendingAnchorRoot = null;
+            }
+
+            // build (or rebuild) the pending anchor at the caret reflecting activeFormats
+            function rebuildPendingAnchor(rootEl) {
+                const sel = window.getSelection();
+                if (!sel.rangeCount) return;
+                let range = sel.getRangeAt(0);
+
+                // remove any existing anchor first
+                if (pendingAnchor) {
+                    removePendingAnchor();
+                    // selection may have collapsed somewhere; re-fetch
+                    if (!sel.rangeCount) return;
+                    range = sel.getRangeAt(0);
+                }
+
+                // determine which formats need a new wrapper: any active format whose
+                // matching ancestor is NOT already present at the caret
+                const startNode = range.startContainer;
+                const startEl = startNode.nodeType === 1 ? startNode : startNode.parentElement;
+                const ancestors = { bold: false, italic: false, underline: false, highlight: false };
+                let n = startEl;
+                while (n && n !== rootEl) {
+                    if (n.nodeType === 1) {
+                        if (n.tagName === 'B' || n.tagName === 'STRONG') ancestors.bold = true;
+                        if (n.tagName === 'I' || n.tagName === 'EM') ancestors.italic = true;
+                        if (n.tagName === 'U') ancestors.underline = true;
+                        if (n.tagName === 'SPAN' && n.style && (
+                            n.style.backgroundColor === 'rgb(254, 240, 138)' ||
+                            n.style.backgroundColor === '#fef08a'
+                        )) ancestors.highlight = true;
+                    }
+                    n = n.parentNode;
+                }
+
+                // formats that need wrapping (active but not present in ancestors)
+                const needed = [];
+                if (activeFormats.highlight && !ancestors.highlight) needed.push('HIGHLIGHT');
+                if (activeFormats.underline && !ancestors.underline) needed.push('U');
+                if (activeFormats.italic && !ancestors.italic) needed.push('I');
+                if (activeFormats.bold && !ancestors.bold) needed.push('B');
+
+                // formats that are present in DOM but should NOT be active: we need to
+                // place the caret OUTSIDE those wrappers. handled via split-and-anchor.
+                const unwanted = [];
+                if (!activeFormats.bold && ancestors.bold) unwanted.push(['B', 'STRONG']);
+                if (!activeFormats.italic && ancestors.italic) unwanted.push(['I', 'EM']);
+                if (!activeFormats.underline && ancestors.underline) unwanted.push(['U']);
+                if (!activeFormats.highlight && ancestors.highlight) unwanted.push('__HIGHLIGHT__');
+
+                // if nothing to fix, nothing to do
+                if (needed.length === 0 && unwanted.length === 0) return;
+
+                // if there are unwanted ancestors, escape them by splitting from innermost out.
+                // we move the caret to a position immediately AFTER the outermost unwanted ancestor.
+                if (unwanted.length > 0) {
+                    // find the outermost unwanted ancestor
+                    let outer = null;
+                    let cur = startEl;
+                    while (cur && cur !== rootEl) {
+                        if (cur.nodeType === 1) {
+                            const t = cur.tagName;
+                            const isUnwanted = unwanted.some(u =>
+                                u === '__HIGHLIGHT__'
+                                    ? (t === 'SPAN' && cur.style && (
+                                        cur.style.backgroundColor === 'rgb(254, 240, 138)' ||
+                                        cur.style.backgroundColor === '#fef08a'))
+                                    : Array.isArray(u) && u.includes(t)
+                            );
+                            if (isUnwanted) outer = cur;
+                        }
+                        cur = cur.parentNode;
+                    }
+
+                    if (outer) {
+                        // split: extract everything from caret to end of outer, place after outer
+                        const after = range.cloneRange();
+                        after.setEndAfter(outer);
+                        const tail = after.extractContents();
+                        outer.parentNode.insertBefore(tail, outer.nextSibling);
+
+                        // place caret right after outer
+                        range = document.createRange();
+                        range.setStartAfter(outer);
+                        range.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+
+                        // drop any empty wrappers we just created from the split
+                        const empty = outer.parentNode.querySelectorAll(':scope > *');
+                        empty.forEach(e => {
+                            if (e.textContent === '' && (
+                                e.tagName === 'B' || e.tagName === 'STRONG' ||
+                                e.tagName === 'I' || e.tagName === 'EM' ||
+                                e.tagName === 'U' || e.tagName === 'SPAN'
+                            )) e.parentNode.removeChild(e);
+                        });
+                    }
+                }
+
+                // build the anchor chain: ZWSP wrapped innermost-first
+                const zwsp = document.createTextNode('\u200B');
+                let inner = zwsp;
+                // wrap from innermost (B) outward to outermost (HIGHLIGHT)
+                for (const tag of needed) {
+                    let w;
+                    if (tag === 'HIGHLIGHT') {
+                        w = document.createElement('span');
+                        w.style.backgroundColor = '#fef08a';
+                    } else {
+                        w = document.createElement(tag);
+                    }
+                    w.appendChild(inner);
+                    inner = w;
+                }
+
+                if (needed.length === 0) {
+                    // no new wrappers; just place a ZWSP for caret stability
+                    range.insertNode(zwsp);
+                    pendingAnchor = zwsp;
+                    pendingAnchorRoot = zwsp;
+                } else {
+                    range.insertNode(inner);
+                    pendingAnchor = zwsp;
+                    pendingAnchorRoot = inner;
+                }
+
+                const caret = document.createRange();
+                caret.setStart(zwsp, 1);
+                caret.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(caret);
+            }
+
+            // top-level: toggle a format. handles both selection and collapsed cursor.
+            function toggleFormat(name, rootEl) {
                 const sel = window.getSelection();
                 if (!sel.rangeCount) return;
                 const range = sel.getRangeAt(0);
 
-                // determine if we're currently in a highlight
-                const startNode = range.startContainer;
-                const endNode = range.endContainer;
-                const startHL = findHighlightAncestor(startNode, rootEl);
-
                 if (sel.isCollapsed) {
-                    // cursor only - if inside highlight, split out so next typing isn't highlighted
-                    if (startHL) {
-                        // split the highlight span at the cursor
-                        const after = range.cloneRange();
-                        after.setEndAfter(startHL);
-                        const tail = after.extractContents();
-                        // insert tail right after the original highlight span
-                        startHL.parentNode.insertBefore(tail, startHL.nextSibling);
-
-                        // insert a zero-width text node OUTSIDE the highlight to anchor caret
-                        // (otherwise browser inherits the highlight style for next typing)
-                        const anchor = document.createTextNode('\u200B');
-                        startHL.parentNode.insertBefore(anchor, startHL.nextSibling);
-
-                        // place caret inside that anchor text node
-                        const caret = document.createRange();
-                        caret.setStart(anchor, 1);
-                        caret.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(caret);
-
-                        // drop any empty highlight spans created by the split
-                        [startHL, anchor.nextSibling].forEach(n => {
-                            if (n && n.nodeType === 1 && n.textContent === '' &&
-                                findHighlightAncestor(n, rootEl) === n) {
-                                n.parentNode.removeChild(n);
-                            }
-                        });
+                    // refresh state from DOM, then flip the requested flag
+                    recomputeActiveFormats(
+                        range.startContainer.nodeType === 1
+                            ? range.startContainer
+                            : range.startContainer.parentNode,
+                        rootEl
+                    );
+                    // if there is already a pending anchor, the user's intent is to flip
+                    // the flag relative to current activeFormats (which already reflects it)
+                    activeFormats[name] = !activeFormats[name];
+                    rebuildPendingAnchor(rootEl);
+                } else {
+                    // non-collapsed: apply directly
+                    if (name === 'highlight') {
+                        toggleHighlightSelection(rootEl, range);
                     } else {
-                        // not in highlight - create an empty highlight span with a zero-width
-                        // anchor inside, so the button reflects active state immediately and
-                        // typing continues the highlight
-                        const span = document.createElement('span');
-                        span.style.backgroundColor = '#fef08a';
-                        span.appendChild(document.createTextNode('\u200B'));
-                        range.insertNode(span);
-                        const caret = document.createRange();
-                        caret.setStart(span.firstChild, 1);
-                        caret.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(caret);
+                        document.execCommand(name, false, null);
                     }
-                    return;
                 }
+            }
 
-                // non-collapsed selection
-                const endHL = findHighlightAncestor(endNode, rootEl);
+            // apply/remove highlight on an existing non-collapsed selection
+            function toggleHighlightSelection(rootEl, range) {
+                const sel = window.getSelection();
+                const startHL = findHighlightAncestor(range.startContainer, rootEl);
+                const endHL = findHighlightAncestor(range.endContainer, rootEl);
                 if (startHL || endHL) {
                     // remove highlights intersecting the selection
-                    // collect all highlight spans inside rootEl that intersect range
                     const spans = Array.from(rootEl.querySelectorAll('span')).filter(s =>
                         (s.style.backgroundColor === 'rgb(254, 240, 138)' ||
                             s.style.backgroundColor === '#fef08a' ||
@@ -1223,7 +1382,6 @@
                     if (startHL && !spans.includes(startHL)) spans.push(startHL);
                     if (endHL && !spans.includes(endHL)) spans.push(endHL);
 
-                    // save selection markers
                     const startMark = document.createElement('span');
                     startMark.dataset.mark = 'start';
                     const endMark = document.createElement('span');
@@ -1237,7 +1395,6 @@
 
                     spans.forEach(unwrapSpan);
 
-                    // restore selection between markers
                     const newRange = document.createRange();
                     newRange.setStartAfter(startMark);
                     newRange.setEndBefore(endMark);
@@ -1245,36 +1402,20 @@
                     sel.addRange(newRange);
                     startMark.parentNode.removeChild(startMark);
                     endMark.parentNode.removeChild(endMark);
-                    // normalize to merge text nodes
                     rootEl.normalize();
                 } else {
                     document.execCommand('backColor', false, '#fef08a');
                 }
             }
 
-            // update format button states to show active formatting
+            // update format button states from the current activeFormats state
             function updateFormatButtonStates(wrap) {
                 if (!wrap) return;
                 const toolbar = wrap.querySelector('.format-toolbar');
                 if (!toolbar) return;
 
-                const sel = window.getSelection();
-                if (!sel.rangeCount) return;
-
                 toolbar.querySelectorAll('.format-btn').forEach(btn => {
-                    const format = btn.dataset.format;
-                    let isActive = false;
-
-                    if (format === 'highlight') {
-                        // Check the actual DOM for a highlight ancestor
-                        const range = sel.getRangeAt(0);
-                        const wrapEl = wrap.querySelector('[contenteditable="true"]');
-                        isActive = !!findHighlightAncestor(range.startContainer, wrapEl);
-                    } else {
-                        isActive = document.queryCommandState(format);
-                    }
-
-                    btn.classList.toggle('active', isActive);
+                    btn.classList.toggle('active', !!activeFormats[btn.dataset.format]);
                 });
             }
 
@@ -1287,7 +1428,7 @@
                 // formatting shortcuts
                 if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
                     e.preventDefault();
-                    document.execCommand('bold');
+                    toggleFormat('bold', el);
                     state.blocks[i].text = htmlToText(el.innerHTML);
                     const wrap = el.closest('.block-wrap');
                     updateFormatButtonStates(wrap);
@@ -1295,7 +1436,7 @@
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
                     e.preventDefault();
-                    document.execCommand('italic');
+                    toggleFormat('italic', el);
                     state.blocks[i].text = htmlToText(el.innerHTML);
                     const wrap = el.closest('.block-wrap');
                     updateFormatButtonStates(wrap);
@@ -1303,7 +1444,7 @@
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
                     e.preventDefault();
-                    document.execCommand('underline');
+                    toggleFormat('underline', el);
                     state.blocks[i].text = htmlToText(el.innerHTML);
                     const wrap = el.closest('.block-wrap');
                     updateFormatButtonStates(wrap);
@@ -1311,7 +1452,7 @@
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
                     e.preventDefault();
-                    toggleHighlight(el);
+                    toggleFormat('highlight', el);
                     state.blocks[i].text = htmlToText(el.innerHTML);
                     const wrap = el.closest('.block-wrap');
                     updateFormatButtonStates(wrap);

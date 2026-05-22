@@ -1,1 +1,0 @@
-spamming ctrl+h adds empty highlighted blocks -> find a method to enhance ux for this

@@ -11,3 +11,13 @@ under _posts/ and the images under assets/images
 
 
 !!!! This project is vibecoded and barely works, you should not trust it!
+
+# TODO
+
+- have a proper save system that doesn't crash if the article is big
+- add a left side panel to quickly navigate thourgh the markers (titles, subtitles, images, etc)
+- add a confirmation to save draft
+- add delete posts from website with confirmations
+- add math latex blocks
+- add a small up/down page helper button
+- add a confirmation button to delete a block
