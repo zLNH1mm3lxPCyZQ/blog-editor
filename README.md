@@ -23,3 +23,4 @@ under _posts/ and the images under assets/images
 - add a confirmation button to delete a block
 - add a TBA block to mark future completion
 - add custom blocks support accepting a template maybe?
+- maybe drop the jekyll and make this editor generate html files directly
