@@ -21,3 +21,5 @@ under _posts/ and the images under assets/images
 - add math latex blocks
 - add a small up/down page helper button
 - add a confirmation button to delete a block
+- add a TBA block to mark future completion
+- add custom blocks support accepting a template maybe?
