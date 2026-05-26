@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLOCK</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <style>
+        body {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            line-height: 1.6;
+            display: flex;
+            gap: 2rem;
+        }
+
+        #toc {
+            width: 200px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 1.5rem;
+            height: fit-content;
+            max-height: calc(100vh - 3rem);
+            overflow-y: auto;
+        }
+
+        #toc-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .toc-item {
+            padding: 0.4rem 0.6rem;
+            margin-bottom: 0.25rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+
+        .toc-item:hover {
+            background: #f3f4f6;
+            color: #2563eb;
+            border-left-color: #2563eb;
+        }
+
+        .toc-item-icon {
+            font-size: 0.9rem;
+            width: 1.2rem;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .toc-item-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #main-container {
+            flex: 1;
+            min-width: 0;
+        }
+
+        #header {
+            margin-bottom: 2rem;
+        }
+
+        #header input {
+            display: block;
+            width: 100%;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #content {
+            margin-bottom: 2rem;
+        }
+
+        #actions {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 0.4rem 0.85rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        #draft-status {
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .block-wrap {
+            position: relative;
+            margin: 0.75rem 0;
+        }
+
+        .block {
+            padding: 0.5rem 1rem;
+            outline: none;
+            min-height: 1.6em;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            border: 1px solid transparent;
+        }
+
+        .block:focus {
+            background: rgba(37, 99, 235, 0.04);
+            border-color: #93c5fd;
+        }
+
+        .block:empty:not(:focus)::before {
+            content: attr(data-placeholder);
+            color: #999;
+            pointer-events: none;
+        }
+
+        .h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+
+        .quote {
+            border-left: 3px solid #2563eb;
+            padding-left: 1rem;
+            font-style: italic;
+            color: #555;
+        }
+
+        .quote-text {
+            outline: none;
+            white-space: pre-wrap;
+            border-radius: 4px;
+        }
+
+        .quote-text:focus {
+            background: rgba(37, 99, 235, 0.04);
+        }
+
+        .quote-text:empty:not(:focus)::before {
+            content: attr(data-placeholder);
+            color: #999;
+            pointer-events: none;
+        }
+
+        .quote-reference {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #666;
+            text-align: right;
+            outline: none;
+            font-style: normal;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+
+        .quote-reference:hover {
+            border-color: #e5e7eb;
+        }
+
+        .quote-reference:focus {
+            border-color: #93c5fd;
+        }
+
+        .quote-reference:empty:before {
+            content: "— reference";
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .code {
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            background: #f5f5f5;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .math {
+            text-align: center;
+            padding: 1rem 0;
+            font-size: 1.1rem;
+            position: relative;
+            min-height: 3em;
+        }
+
+        .math-render {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            pointer-events: none;
+        }
+
+        .math:focus .math-render {
+            display: none;
+        }
+
+        .math-error {
+            color: #dc2626;
+            font-size: 0.85rem;
+        }
+
+        .hr {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            min-height: 1.6em;
+        }
+
+        .hr hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 0;
+            width: 100%;
+        }
+
+        .image {
+            text-align: center;
+            padding: 0.5rem 0;
+        }
+
+        .image-display {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+        }
+
+        .image-input-wrapper {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.5rem;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        .image-url-input {
+            flex: 1;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .image-upload-btn {
+            padding: 0.25rem 0.75rem;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .image-upload-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .image-title {
+            margin-top: 0.6rem;
+            font-size: 0.9rem;
+            color: #374151;
+            text-align: center;
+            outline: none;
+            font-weight: 500;
+            padding: 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+
+        .image-title:hover {
+            border-color: #e5e7eb;
+        }
+
+        .image-title:focus {
+            border-color: #93c5fd;
+        }
+
+        .image-title:empty:before {
+            content: "image title";
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        .slash-menu {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+            max-width: 300px;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .slash-query {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            color: #666;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            font-family: monospace;
+        }
+
+        .slash-item {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .slash-item:hover,
+        .slash-item.active {
+            background: #f3f4f6;
+        }
+
+        .slash-item .hint {
+            font-size: 0.75rem;
+            color: #999;
+            font-family: monospace;
+        }
+
+        .slash-item b {
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        .block-controls {
+            position: absolute;
+            left: 100%;
+            top: 0.5rem;
+            display: flex;
+            gap: 2px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .block-wrap:hover .block-controls,
+        .block-controls:hover {
+            opacity: 1;
+        }
+
+        .ctrl-btn {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        .ctrl-btn:hover {
+            background: #f3f4f6;
+            border-color: #2563eb;
+            color: #2563eb;
+        }
+
+        .insert-zone {
+            height: 2px;
+            cursor: pointer;
+            position: relative;
+            margin: 0.5rem 0;
+        }
+
+        .insert-zone:hover {
+            background: #93c5fd;
+        }
+
+        .insert-zone-btn {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 1px solid #93c5fd;
+            background: white;
+            border-radius: 50%;
+            font-size: 14px;
+            padding: 0;
+            display: none;
+            color: #2563eb;
+            cursor: pointer;
+        }
+
+        .insert-zone:hover .insert-zone-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="toc">
+        <div id="toc-title">Contents</div>
+        <div id="toc-items"></div>
+    </div>
+    <div id="main-container">
+        <div id="header">
+            <input type="text" id="title" placeholder="Title">
+            <input type="datetime-local" id="date">
+            <input type="text" id="author" placeholder="Author">
+        </div>
+        <div id="content"></div>
+        <div id="actions">
+            <button class="btn btn-secondary" id="load-btn">Load Draft</button>
+            <button class="btn btn-secondary" id="save-draft-btn">Save Draft</button>
+            <button class="btn btn-secondary" id="import-btn">Import Article</button>
+            <button class="btn btn-primary" id="export-btn">Export Article</button>
+            <span id="draft-status"></span>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // Config
+            const BLOCK_TYPES = {
+                p: { label: 'text', placeholder: 'type something...' },
+                h2: { label: 'heading', placeholder: 'heading' },
+                h3: { label: 'subheading', placeholder: 'subheading' },
+                quote: { label: 'quote', placeholder: 'quote' },
+                code: { label: 'code', placeholder: 'code' },
+                math: { label: 'math', placeholder: 'E = mc^2' },
+                image: { label: 'image', placeholder: 'image URL or upload' },
+                hr: { label: 'separator', placeholder: '' }
+            };
+
+            // State
+            const state = { blocks: [{ id: Date.now(), type: 'p', text: '' }] };
+            let slashMenuOpen = false, focusBlockId = null, db = null, autoSaveTimer = null;
+
+            // DOM
+            const $ = id => document.getElementById(id);
+            const el = { content: $('content'), title: $('title'), date: $('date'), author: $('author'), draftStatus: $('draft-status'), tocItems: $('toc-items') };
+
+            // Utilities
+            const htmlToText = html => html.replace(/<div class="math-render">[\s\S]*?<\/div>/gi, '').replace(/<div><br><\/div>/gi, '\n').replace(/<div>/gi, '\n').replace(/<\/div>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+            const textToHtml = text => text.replace(/\n/g, '<br>');
+            const setStatus = msg => { el.draftStatus.textContent = msg; setTimeout(() => el.draftStatus.textContent = '', 3000); };
+            const setDefaultDate = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); el.date.value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+            const renderMath = latex => { if (!window.katex) return ''; try { return window.katex.renderToString(latex, { displayMode: true, throwOnError: false, errorColor: '#dc2626' }); } catch (e) { return `<span class="math-error">LaTeX error: ${e.message}</span>`; } };
+
+            const focusBlock = blockId => {
+                const el = document.querySelector(`[data-block-id="${blockId}"]`);
+                if (!el) return;
+                el.focus();
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            };
+
+            // Block operations
+            const swap = (i1, i2, b) => { [state.blocks[i1], state.blocks[i2]] = [state.blocks[i2], state.blocks[i1]]; focusBlockId = b.id; render(); };
+            const moveUp = (i, b) => i > 0 && swap(i, i - 1, b);
+            const moveDown = (i, b) => i < state.blocks.length - 1 && swap(i, i + 1, b);
+            const deleteBlk = i => { if (state.blocks.length === 1) return; focusBlockId = state.blocks[i > 0 ? i - 1 : 0].id; state.blocks.splice(i, 1); render(); };
+            const insertAfter = i => { const b = state.blocks[i]; if (i === state.blocks.length - 1 && b.text === '') return; const nb = { id: Date.now(), type: 'p', text: '' }; state.blocks.splice(i + 1, 0, nb); focusBlockId = nb.id; render(); };
+            const insertBefore = i => { const nb = { id: Date.now(), type: 'p', text: '' }; state.blocks.splice(i, 0, nb); focusBlockId = nb.id; render(); };
+            const changeType = (i, type) => { state.blocks[i].type = type; const txt = state.blocks[i].text; if (txt === '/' || txt === '') state.blocks[i].text = ''; focusBlockId = state.blocks[i].id; render(); };
+
+            // Database
+            const dbOp = (mode, cb) => new Promise((res, rej) => { if (!db) return res(); const tx = db.transaction(['drafts'], mode), st = tx.objectStore('drafts'), req = cb(st); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
+            const initDB = () => new Promise((res, rej) => { const req = indexedDB.open('BlockEditorDB', 1); req.onerror = () => rej(req.error); req.onsuccess = () => { db = req.result; res(db); }; req.onupgradeneeded = e => { const d = e.target.result; if (!d.objectStoreNames.contains('drafts')) d.createObjectStore('drafts', { keyPath: 'id' }); }; });
+            const save = async () => { await dbOp('readwrite', s => s.put({ id: 'current-draft', title: el.title.value, date: el.date.value, author: el.author.value, blocks: state.blocks, savedAt: new Date().toISOString() })); setStatus('Draft saved'); };
+            const load = async () => { const d = await dbOp('readonly', s => s.get('current-draft')); if (d) { el.title.value = d.title || ''; el.date.value = d.date || ''; el.author.value = d.author || ''; state.blocks = d.blocks || [{ id: Date.now(), type: 'p', text: '' }]; render(); setStatus('Draft loaded'); } else setStatus('No draft found'); };
+            const autoSave = () => { clearTimeout(autoSaveTimer); autoSaveTimer = setTimeout(() => save().catch(e => console.error('Auto-save failed:', e)), 2000); };
+            const checkDraft = async () => { const d = await dbOp('readonly', s => s.get('current-draft')); if (d) setStatus('Draft found - click Load Draft to restore'); };
+
+            // Slash menu
+            const showSlash = (idx, blkEl) => {
+                const existing = document.querySelector('.slash-menu');
+                if (existing) existing.remove();
+
+                const menu = document.createElement('div');
+                menu.className = 'slash-menu';
+                let query = '', activeIdx = 0, filtered = [];
+                const allTypes = Object.entries(BLOCK_TYPES).filter(([t]) => t !== 'p');
+
+                const highlight = (txt, q) => { if (!q) return txt; const i = txt.toLowerCase().indexOf(q.toLowerCase()); return i < 0 ? txt : txt.slice(0, i) + `<b>${txt.slice(i, i + q.length)}</b>` + txt.slice(i + q.length); };
+                const build = () => {
+                    menu.innerHTML = '';
+                    if (query) { const qh = document.createElement('div'); qh.className = 'slash-query'; qh.textContent = `/${query}`; menu.appendChild(qh); }
+                    const q = query.toLowerCase();
+                    filtered = q ? allTypes.filter(([t, d]) => t.toLowerCase().includes(q) || d.label.toLowerCase().includes(q)) : allTypes;
+                    if (filtered.length === 0) { const empty = document.createElement('div'); empty.className = 'slash-item'; empty.style.color = '#999'; empty.textContent = 'no matches'; menu.appendChild(empty); return; }
+                    activeIdx = Math.min(activeIdx, filtered.length - 1);
+                    filtered.forEach(([t, d], i) => { const item = document.createElement('div'); item.className = 'slash-item' + (i === activeIdx ? ' active' : ''); item.innerHTML = `<span>${highlight(d.label, q)}</span><span class="hint">${highlight(t, q)}</span>`; item.onclick = () => select(t); item.onmouseenter = () => setActive(i); menu.appendChild(item); });
+                    reposition();
+                };
+                const setActive = i => { activeIdx = Math.max(0, Math.min(i, filtered.length - 1)); build(); };
+                const select = type => { cleanup(); changeType(idx, type); };
+                const cleanup = () => { slashMenuOpen = false; menu.remove(); document.removeEventListener('click', handleClick); document.removeEventListener('keydown', handleKeys); };
+                const handleClick = e => { if (!menu.contains(e.target)) { cleanup(); focusBlock(state.blocks[idx].id); } };
+                const reposition = () => {
+                    const r = blkEl.getBoundingClientRect(), mr = menu.getBoundingClientRect();
+                    let left = r.left + window.scrollX - mr.width - 8;
+                    if (left < 8) left = 8;
+                    menu.style.left = left + 'px';
+                    // Check if menu would go below viewport
+                    const menuBottom = r.bottom + mr.height;
+                    const viewportBottom = window.innerHeight;
+                    if (menuBottom > viewportBottom) {
+                        // Position above the block
+                        menu.style.top = (r.top + window.scrollY - mr.height - 8) + 'px';
+                    } else {
+                        // Position below the block
+                        menu.style.top = (r.bottom + window.scrollY) + 'px';
+                    }
+                };
+                const handleKeys = e => {
+                    if (e.key === 'Escape') { e.preventDefault(); cleanup(); focusBlock(state.blocks[idx].id); }
+                    else if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIdx + 1); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIdx - 1); }
+                    else if (e.key === 'Enter') { e.preventDefault(); if (filtered.length > 0) select(filtered[activeIdx][0]); }
+                    else if (e.key === 'Backspace') { e.preventDefault(); if (query.length === 0) { cleanup(); focusBlock(state.blocks[idx].id); } else { query = query.slice(0, -1); activeIdx = 0; build(); } }
+                    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); query += e.key; activeIdx = 0; build(); }
+                };
+                build();
+                document.body.appendChild(menu);
+                slashMenuOpen = true;
+                reposition();
+                setTimeout(() => { document.addEventListener('click', handleClick); document.addEventListener('keydown', handleKeys); }, 0);
+            };
+
+            // Export
+            const exportHTML = async () => {
+                const title = el.title.value || 'Untitled', date = el.date.value, author = el.author.value || 'Anonymous';
+                const fmtDate = date ? new Date(date).toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                const blocks = state.blocks.filter(b => b.type === 'hr' || b.type === 'image' || b.text.trim()).map(b => {
+                    const c = textToHtml(b.text);
+                    return { h2: `        <h2>${c}</h2>`, h3: `        <h3>${c}</h3>`, quote: `        <blockquote>${c}${b.reference ? `<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666; text-align: right; font-style: normal;">— ${b.reference}</div>` : ''}</blockquote>`, code: `        <pre><code>${c}</code></pre>`, math: `        <div class="math-display">${c}</div>`, image: b.text ? `        <figure style="text-align: center; margin: 1rem 0;">\n            <img src="${b.text}" alt="${b.title || 'Image'}" style="max-width: 100%; height: auto; border-radius: 4px;">\n            ${b.title ? `<figcaption style="margin-top: 0.6rem; font-size: 0.9rem; color: #374151; font-weight: 500;">${b.title}</figcaption>` : ''}\n        </figure>` : '', hr: `        <hr>` }[b.type] || `        <p>${c}</p>`;
+                }).join('\n');
+                const html = `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>${title}</title>\n    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">\n    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>\n    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>\n    <script>\n        document.addEventListener("DOMContentLoaded", function() {\n            document.querySelectorAll('.math-display').forEach(el => {\n                try { katex.render(el.textContent, el, {displayMode: true, throwOnError: false}); }\n                catch (e) { el.textContent = 'LaTeX error: ' + e.message; el.style.color = '#dc2626'; }\n            });\n        });\n    <\/script>\n    <style>\n        body { max-width: 680px; margin: 0 auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; }\n        header { margin-bottom: 2rem; border-bottom: 1px solid #ddd; padding-bottom: 1rem; }\n        h1 { margin: 0 0 0.5rem 0; }\n        .meta { color: #666; font-size: 0.9rem; }\n        p { margin: 1rem 0; }\n        h2 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0; }\n        h3 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0; }\n        blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; margin: 1rem 0; font-style: italic; color: #555; }\n        pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; margin: 1rem 0; }\n        code { font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 0.9rem; }\n        .math-display { text-align: center; padding: 1rem 0; font-size: 1.1rem; margin: 1rem 0; }\n        hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }\n        figure { text-align: center; margin: 1rem 0; }\n        img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 0 auto; }\n        figcaption { margin-top: 0.6rem; font-size: 0.9rem; color: #374151; font-weight: 500; }\n    </style>\n</head>\n<body>\n    <header>\n        <h1>${title}</h1>\n        <div class="meta">\n            ${fmtDate ? `<div>${fmtDate}</div>` : ''}\n            <div>By ${author}</div>\n        </div>\n    </header>\n    <article>\n${blocks}\n    </article>\n</body>\n</html>`;
+
+                // Use File System Access API if available, otherwise fallback to download
+                if (window.showSaveFilePicker) {
+                    try {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: `${title.toLowerCase().replace(/\s+/g, '-')}.html`,
+                            types: [{
+                                description: 'HTML Files',
+                                accept: { 'text/html': ['.html'] }
+                            }]
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(html);
+                        await writable.close();
+                        setStatus('Article exported successfully');
+                    } catch (e) {
+                        if (e.name !== 'AbortError') {
+                            console.error('Export failed:', e);
+                            setStatus('Export failed');
+                        }
+                    }
+                } else {
+                    // Fallback for browsers without File System Access API
+                    const blob = new Blob([html], { type: 'text/html' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+                    a.href = url; a.download = `${title.toLowerCase().replace(/\s+/g, '-')}.html`; a.click(); URL.revokeObjectURL(url);
+                    setStatus('Article exported');
+                }
+            };
+
+            // Import
+            const importHTML = () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'text/html,.html';
+                input.onchange = e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        try {
+                            parseAndLoadHTML(e.target.result);
+                            setStatus('Article imported successfully');
+                        } catch (err) {
+                            console.error('Import failed:', err);
+                            setStatus('Import failed - invalid file format');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            };
+
+            const parseAndLoadHTML = html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Extract title
+                const titleEl = doc.querySelector('header h1');
+                el.title.value = titleEl?.textContent || '';
+
+                // Extract author
+                const metaDiv = doc.querySelector('header .meta');
+                const authorDiv = Array.from(metaDiv?.querySelectorAll('div') || []).find(d => d.textContent.startsWith('By '));
+                el.author.value = authorDiv?.textContent.replace('By ', '') || '';
+
+                // Extract blocks from article
+                const article = doc.querySelector('article');
+                if (!article) throw new Error('No article element found');
+
+                const blocks = [];
+                const children = Array.from(article.children);
+
+                children.forEach(node => {
+                    const tag = node.tagName.toLowerCase();
+                    let blockId = Date.now() + blocks.length;
+
+                    if (tag === 'h2') {
+                        blocks.push({ id: blockId, type: 'h2', text: node.innerHTML.replace(/<br\s*\/?>/gi, '\n') });
+                    } else if (tag === 'h3') {
+                        blocks.push({ id: blockId, type: 'h3', text: node.innerHTML.replace(/<br\s*\/?>/gi, '\n') });
+                    } else if (tag === 'blockquote') {
+                        const refDiv = node.querySelector('div[style*="text-align: right"]');
+                        const reference = refDiv ? refDiv.textContent.replace('— ', '').trim() : '';
+                        let text = node.innerHTML;
+                        if (refDiv) text = text.replace(refDiv.outerHTML, '');
+                        blocks.push({ id: blockId, type: 'quote', text: text.replace(/<br\s*\/?>/gi, '\n').trim(), reference });
+                    } else if (tag === 'pre') {
+                        const code = node.querySelector('code');
+                        blocks.push({ id: blockId, type: 'code', text: (code?.innerHTML || node.innerHTML).replace(/<br\s*\/?>/gi, '\n') });
+                    } else if (tag === 'div' && node.classList.contains('math-display')) {
+                        blocks.push({ id: blockId, type: 'math', text: node.textContent.trim() });
+                    } else if (tag === 'figure') {
+                        const img = node.querySelector('img');
+                        const caption = node.querySelector('figcaption');
+                        blocks.push({ id: blockId, type: 'image', text: img?.getAttribute('src') || '', title: caption?.textContent || '' });
+                    } else if (tag === 'hr') {
+                        blocks.push({ id: blockId, type: 'hr', text: '' });
+                    } else if (tag === 'p') {
+                        blocks.push({ id: blockId, type: 'p', text: node.innerHTML.replace(/<br\s*\/?>/gi, '\n') });
+                    }
+                });
+
+                // Ensure at least one block
+                if (blocks.length === 0) {
+                    blocks.push({ id: Date.now(), type: 'p', text: '' });
+                }
+
+                state.blocks = blocks;
+                render();
+            };
+
+            // Block element creators
+            const createBtn = (txt, title, onClick) => { const b = document.createElement('button'); b.className = 'ctrl-btn'; b.textContent = txt; b.title = title; b.onclick = onClick; return b; };
+
+            const blockCreators = {
+                hr: (b, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'block hr'; el.innerHTML = '<hr>'; el.tabIndex = 0; el.dataset.blockId = b.id;
+                    el.onkeydown = e => { if (e.key === 'Backspace') { e.preventDefault(); deleteBlk(i); } else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); insertAfter(i); } };
+                    return el;
+                },
+                quote: (b, i) => {
+                    const container = document.createElement('div');
+                    container.className = 'block quote';
+                    const el = document.createElement('div');
+                    el.className = 'quote-text';
+                    el.contentEditable = 'true'; el.innerHTML = textToHtml(b.text);
+                    el.dataset.placeholder = BLOCK_TYPES.quote.placeholder;
+                    el.dataset.blockId = b.id;
+                    el.oninput = () => { b.text = htmlToText(el.innerHTML); autoSave(); };
+                    el.onkeydown = e => {
+                        if (slashMenuOpen) { e.preventDefault(); return; }
+                        if (e.key === '/' && el.textContent === '') { e.preventDefault(); showSlash(i, el); return; }
+                        const acts = { 'Enter': () => insertAfter(i), 'Delete': () => deleteBlk(i), 'ArrowUp': () => moveUp(i, b), 'ArrowDown': () => moveDown(i, b) };
+                        if (e.ctrlKey && acts[e.key]) { e.preventDefault(); acts[e.key](); }
+                    };
+                    const ref = document.createElement('div');
+                    ref.className = 'quote-reference'; ref.contentEditable = 'true'; ref.textContent = b.reference || '';
+                    ref.oninput = () => { b.reference = ref.textContent; autoSave(); };
+                    ref.onkeydown = e => {
+                        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); insertAfter(i); }
+                        if (e.key === 'Backspace') { e.stopPropagation(); }
+                    };
+                    container.append(el, ref);
+                    return container;
+                },
+                image: (b, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'block image'; el.tabIndex = 0; el.dataset.blockId = b.id;
+                    const wrapper = document.createElement('div'); wrapper.className = 'image-input-wrapper';
+                    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'image-url-input'; inp.placeholder = 'Enter image URL or click upload'; inp.value = b.text || '';
+                    const upd = () => { if (b.text) imgDiv.innerHTML = `<img src="${b.text}" class="image-display" alt="Block image">`; else imgDiv.innerHTML = ''; };
+                    inp.oninput = () => { b.text = inp.value; upd(); autoSave(); };
+                    inp.onkeydown = e => { if (e.key === 'Backspace') { e.stopPropagation(); } };
+                    const upBtn = document.createElement('button'); upBtn.className = 'image-upload-btn'; upBtn.textContent = 'Upload';
+                    upBtn.onclick = e => { e.preventDefault(); const fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.onchange = e => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = e => { b.text = e.target.result; inp.value = e.target.result; upd(); autoSave(); }; r.readAsDataURL(f); } }; fi.click(); };
+                    wrapper.append(inp, upBtn); el.appendChild(wrapper);
+                    const imgDiv = document.createElement('div'); upd(); el.appendChild(imgDiv);
+                    const tit = document.createElement('div'); tit.className = 'image-title'; tit.contentEditable = 'true'; tit.textContent = b.title || '';
+                    tit.oninput = () => { b.title = tit.textContent; autoSave(); };
+                    tit.onkeydown = e => {
+                        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); insertAfter(i); }
+                        // Stop backspace from bubbling to parent when editing title
+                        if (e.key === 'Backspace') { e.stopPropagation(); }
+                    };
+                    el.appendChild(tit);
+                    el.onkeydown = e => { if (e.key === 'Backspace') { e.preventDefault(); deleteBlk(i); } else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); insertAfter(i); } };
+                    return el;
+                },
+                default: (b, i) => {
+                    const el = document.createElement('div');
+                    el.className = `block ${b.type !== 'p' ? b.type : ''}`; el.contentEditable = 'true'; el.innerHTML = textToHtml(b.text);
+                    el.dataset.placeholder = BLOCK_TYPES[b.type]?.placeholder || 'type something...'; el.dataset.blockId = b.id;
+                    if (b.type === 'math' && b.text && window.katex) { const rd = document.createElement('div'); rd.className = 'math-render'; rd.innerHTML = renderMath(b.text); el.appendChild(rd); }
+                    el.oninput = () => { b.text = htmlToText(el.innerHTML); if (b.type === 'math' && window.katex) { let rd = el.querySelector('.math-render'); if (!rd) { rd = document.createElement('div'); rd.className = 'math-render'; el.appendChild(rd); } rd.innerHTML = renderMath(b.text); } autoSave(); };
+                    el.onkeydown = e => {
+                        if (slashMenuOpen) { e.preventDefault(); return; }
+                        if (e.key === 'Tab' && b.type === 'code') { e.preventDefault(); document.execCommand('insertText', false, '    '); return; }
+                        if (e.key === '/' && el.textContent === '') { e.preventDefault(); showSlash(i, el); return; }
+                        const acts = { 'Enter': () => insertAfter(i), 'Delete': () => deleteBlk(i), 'ArrowUp': () => moveUp(i, b), 'ArrowDown': () => moveDown(i, b) };
+                        if (e.ctrlKey && acts[e.key]) { e.preventDefault(); acts[e.key](); }
+                    };
+                    return el;
+                }
+            };
+
+            // Render
+            const getBlockIcon = type => ({ p: '📝', h2: '📌', h3: '📍', quote: '💬', code: '⌨️', math: '∑', image: '🖼️', hr: '—' }[type] || '📝');
+            const getBlockPreview = b => {
+                if (b.type === 'hr') return 'separator';
+                if (b.type === 'image') return b.title || 'image';
+                const text = b.text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
+                return text.slice(0, 30) + (text.length > 30 ? '...' : '') || BLOCK_TYPES[b.type]?.label || 'empty';
+            };
+
+            const scrollToBlock = blockId => {
+                const el = document.querySelector(`[data-block-id="${blockId}"]`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+
+            const renderTOC = () => {
+                el.tocItems.innerHTML = '';
+                state.blocks.forEach(b => {
+                    const item = document.createElement('div');
+                    item.className = 'toc-item';
+                    const icon = document.createElement('span');
+                    icon.className = 'toc-item-icon';
+                    icon.textContent = getBlockIcon(b.type);
+                    const text = document.createElement('span');
+                    text.className = 'toc-item-text';
+                    text.textContent = getBlockPreview(b);
+                    item.append(icon, text);
+                    item.onclick = () => scrollToBlock(b.id);
+                    el.tocItems.appendChild(item);
+                });
+            };
+
+            const render = () => {
+                el.content.innerHTML = '';
+                state.blocks.forEach((b, i) => {
+                    const zone = document.createElement('div'); zone.className = 'insert-zone'; const zb = createBtn('+', 'insert block here', e => { e.stopPropagation(); insertBefore(i); }); zb.className = 'insert-zone-btn'; zone.onclick = () => insertBefore(i); zone.appendChild(zb); el.content.appendChild(zone);
+                    const wrap = document.createElement('div'); wrap.className = 'block-wrap';
+                    const blk = (blockCreators[b.type] || blockCreators.default)(b, i);
+                    const ctrl = document.createElement('div'); ctrl.className = 'block-controls'; ctrl.append(createBtn('↑', 'move up', () => moveUp(i, b)), createBtn('↓', 'move down', () => moveDown(i, b)), createBtn('×', 'delete', () => deleteBlk(i)));
+                    wrap.append(blk, ctrl); el.content.appendChild(wrap);
+                });
+                const endZone = document.createElement('div'); endZone.className = 'insert-zone'; const ezb = createBtn('+', 'insert block here', e => { e.stopPropagation(); insertBefore(state.blocks.length); }); ezb.className = 'insert-zone-btn'; endZone.onclick = () => insertBefore(state.blocks.length); endZone.appendChild(ezb); el.content.appendChild(endZone);
+                if (focusBlockId !== null) { focusBlock(focusBlockId); focusBlockId = null; }
+                renderTOC();
+            };
+
+            // Init
+            setDefaultDate();
+            $('export-btn').onclick = exportHTML;
+            $('import-btn').onclick = importHTML;
+            $('save-draft-btn').onclick = () => save().catch(e => { console.error('Save failed:', e); setStatus('Save failed'); });
+            $('load-btn').onclick = () => load().catch(e => { console.error('Load failed:', e); setStatus('Load failed'); });
+            [el.title, el.date, el.author].forEach(e => e.oninput = autoSave);
+            render();
+            initDB().then(checkDraft).catch(e => { console.error('Init error:', e); setStatus('Database error'); });
+        })();
+    </script>
+</body>
+
+</html>
